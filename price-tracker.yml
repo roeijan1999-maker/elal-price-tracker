@@ -1,0 +1,55 @@
+name: 🛫 El Al Price Tracker
+
+on:
+  schedule:
+    # רץ כל שעה (ניתן לשנות לכל 30 דקות: */30 * * * *)
+    - cron: "0 * * * *"
+  workflow_dispatch:   # הרצה ידנית מה-UI של GitHub
+
+jobs:
+  check-price:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # ─── 1. Checkout ───────────────────────────────
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # ─── 2. שחזר מחיר אחרון מ-Cache ──────────────
+      - name: Restore last price cache
+        uses: actions/cache@v4
+        with:
+          path: last_price.json
+          key: elal-price-${{ runner.os }}
+          restore-keys: elal-price-
+
+      # ─── 3. Python ─────────────────────────────────
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # ─── 4. התקן תלויות ───────────────────────────
+      - name: Install dependencies
+        run: |
+          pip install playwright
+          playwright install chromium
+          playwright install-deps chromium
+
+      # ─── 5. הרץ את הסורק ──────────────────────────
+      - name: Run price scraper
+        env:
+          TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DEPART_DATE:      ${{ vars.DEPART_DATE }}
+          RETURN_DATE:      ${{ vars.RETURN_DATE }}
+        run: python scraper.py
+
+      # ─── 6. שמור מחיר עדכני ב-Cache ──────────────
+      - name: Save price cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: last_price.json
+          key: elal-price-${{ runner.os }}-${{ github.run_id }}
